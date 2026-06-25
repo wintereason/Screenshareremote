@@ -18,9 +18,9 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            val value = result.data?.getStringExtra(ScanQrActivity.EXTRA_QR_VALUE)?.trim()
-            if (!value.isNullOrBlank()) {
-                val normalized = normalizeServerUrl(value)
+            val url = result.data?.getStringExtra(ScanQrActivity.EXTRA_QR_VALUE)?.trim()
+            if (!url.isNullOrBlank()) {
+                val normalized = normalizeServerUrl(url)
                 saveServerUrl(normalized)
                 findViewById<WebView>(R.id.webView).loadUrl(normalized)
             }
@@ -30,21 +30,13 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Keep screen on and hide system UI for true fullscreen
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-
         setContentView(R.layout.activity_main)
 
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        enterImmersiveMode()
+
         val webView = findViewById<WebView>(R.id.webView)
-        val btnScan = findViewById<Button>(R.id.btnScanQr)
+        val scanButton = findViewById<Button>(R.id.btnScanQr)
 
         webView.webViewClient = WebViewClient()
         with(webView.settings) {
@@ -55,7 +47,7 @@ class MainActivity : AppCompatActivity() {
             loadWithOverviewMode = true
         }
 
-        btnScan.setOnClickListener {
+        scanButton.setOnClickListener {
             scanQrLauncher.launch(Intent(this, ScanQrActivity::class.java))
         }
 
@@ -65,18 +57,10 @@ class MainActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            // Re-apply immersive fullscreen if system bars reappear
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                    View.SYSTEM_UI_FLAG_FULLSCREEN or
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            enterImmersiveMode()
         }
     }
 
-    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         val webView = findViewById<WebView>(R.id.webView)
         if (webView.canGoBack()) {
@@ -86,19 +70,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun enterImmersiveMode() {
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+    }
+
     private fun loadServerUrl(): String {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val saved = prefs.getString(PREF_SERVER_URL, null)?.trim()
-        return if (!saved.isNullOrBlank()) {
-            saved
-        } else {
-            DEFAULT_SERVER_URL
-        }
+        return if (!saved.isNullOrBlank()) saved else DEFAULT_SERVER_URL
     }
 
     private fun saveServerUrl(url: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        prefs.edit().putString(PREF_SERVER_URL, url).apply()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putString(PREF_SERVER_URL, url)
+            .apply()
     }
 
     private fun normalizeServerUrl(value: String): String {
@@ -114,8 +106,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "ssr_prefs"
         private const val PREF_SERVER_URL = "server_url"
-
-        // Default fallback if nothing scanned yet
         private const val DEFAULT_SERVER_URL = "http://192.168.1.3:8080/"
     }
 }

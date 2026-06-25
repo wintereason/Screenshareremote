@@ -2,10 +2,10 @@ package com.example.screenshareremote
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Button
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -13,7 +13,6 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
@@ -23,7 +22,17 @@ import java.util.concurrent.Executors
 class ScanQrActivity : AppCompatActivity() {
 
     private lateinit var cameraExecutor: ExecutorService
-    private var didReturnResult: Boolean = false
+    private var didReturnResult = false
+
+    private val requestCameraPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startCamera()
+        } else {
+            showPermissionError()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,14 +45,12 @@ class ScanQrActivity : AppCompatActivity() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        if (hasCameraPermission()) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
             startCamera()
         } else {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA),
-                REQ_CAMERA
-            )
+            requestCameraPermission.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -52,28 +59,14 @@ class ScanQrActivity : AppCompatActivity() {
         cameraExecutor.shutdown()
     }
 
-    private fun hasCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_CAMERA) {
-            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-            if (granted) {
-                startCamera()
-            } else {
-                Toast.makeText(this, "Camera permission is required to scan QR codes.", Toast.LENGTH_LONG)
-                    .show()
-                setResult(RESULT_CANCELED)
-                finish()
-            }
-        }
+    private fun showPermissionError() {
+        Toast.makeText(
+            this,
+            "Camera permission is required to scan QR codes.",
+            Toast.LENGTH_LONG
+        ).show()
+        setResult(RESULT_CANCELED)
+        finish()
     }
 
     private fun startCamera() {
@@ -81,8 +74,8 @@ class ScanQrActivity : AppCompatActivity() {
         cameraProviderFuture.addListener(
             {
                 val cameraProvider = cameraProviderFuture.get()
-
                 val previewView = findViewById<PreviewView>(R.id.previewView)
+
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
@@ -94,18 +87,16 @@ class ScanQrActivity : AppCompatActivity() {
                         it.setAnalyzer(cameraExecutor, QrAnalyzer(::onQrScanned))
                     }
 
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
                 try {
                     cameraProvider.unbindAll()
                     cameraProvider.bindToLifecycle(
                         this,
-                        cameraSelector,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
                         imageAnalysis
                     )
-                } catch (_: Exception) {
-                    Toast.makeText(this, "Failed to start camera.", Toast.LENGTH_LONG).show()
+                } catch (exception: Exception) {
+                    Toast.makeText(this, "Unable to start camera.", Toast.LENGTH_LONG).show()
                     setResult(RESULT_CANCELED)
                     finish()
                 }
@@ -144,7 +135,7 @@ class ScanQrActivity : AppCompatActivity() {
                         onResult(value)
                     }
                 }
-                .addOnFailureListener { /* ignore */ }
+                .addOnFailureListener { /* ignore errors */ }
                 .addOnCompleteListener {
                     imageProxy.close()
                 }
@@ -153,7 +144,6 @@ class ScanQrActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_QR_VALUE = "qr_value"
-        private const val REQ_CAMERA = 1001
     }
 }
 
